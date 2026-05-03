@@ -2,6 +2,20 @@
 
 This is a Container Storage Interface ([CSI](https://github.com/container-storage-interface/spec/blob/master/spec.md)) for S3 (or S3 compatible) storage. This can dynamically allocate buckets and mount them via a fuse mount into any container.
 
+## athalabs fork
+
+This is the [athalabs](https://github.com/athalabs/k8s-csi-s3) fork of `yandex-cloud/k8s-csi-s3`. It tracks upstream and publishes **multi-arch (linux/amd64 + linux/arm64)** images to GHCR:
+
+```
+ghcr.io/athalabs/csi-s3:<version>
+```
+
+Automation in this repo:
+
+* `.github/workflows/upstream-sync.yml` opens a daily PR merging `yandex-cloud/k8s-csi-s3@master` into our `master`.
+* `.github/workflows/upstream-tags.yml` mirrors new upstream `v*` tags onto our `master` HEAD daily.
+* `.github/workflows/release.yml` builds and pushes the multi-arch image to GHCR on every pushed `v*` tag.
+
 ## Kubernetes installation
 
 ### Requirements
@@ -12,12 +26,12 @@ This is a Container Storage Interface ([CSI](https://github.com/container-storag
 
 ### Helm chart
 
-Helm chart is published at `https://yandex-cloud.github.io/k8s-csi-s3`:
+Helm chart is published at `https://athalabs.github.io/k8s-csi-s3`:
 
 ```
-helm repo add yandex-s3 https://yandex-cloud.github.io/k8s-csi-s3/charts
+helm repo add athalabs https://athalabs.github.io/k8s-csi-s3/charts
 
-helm install csi-s3 yandex-s3/csi-s3
+helm install csi-s3 athalabs/csi-s3
 ```
 
 ### Manual installation

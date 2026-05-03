@@ -1,0 +1,58 @@
+name: Mirror upstream tags
+
+on:
+  schedule:
+    # Daily at 06:37 UTC, after upstream-sync runs
+    - cron: "37 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REPO: yandex-cloud/k8s-csi-s3
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror new upstream v* tags onto current HEAD
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Fetch upstream tags (without polluting refs/tags/* until we decide).
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" || true
+          git fetch upstream --tags --no-tags 'refs/tags/v*:refs/upstream-tags/*'
+
+          local_tags=$(git tag -l 'v*' | sort -u)
+          # Only mirror well-formed semver-ish tags to avoid odd refs.
+          upstream_tags=$(git for-each-ref --format='%(refname:strip=2)' refs/upstream-tags \
+            | grep -E '^v[0-9A-Za-z._-]+$' || true)
+
+          to_create=$(comm -23 <(printf '%s\n' "$upstream_tags" | sort -u) <(printf '%s\n' "$local_tags" | sort -u))
+
+          if [ -z "$to_create" ]; then
+            echo "No new upstream tags to mirror."
+            exit 0
+          fi
+
+          echo "Will mirror tags onto current HEAD ($(git rev-parse --short HEAD)):"
+          printf '  %s\n' $to_create
+
+          for tag in $to_create; do
+            # Create an annotated tag on our HEAD and push it. Pushing the tag
+            # triggers the Release workflow which builds and pushes the multi-arch image.
+            git tag -a "$tag" -m "Mirrored from ${UPSTREAM_REPO}@${tag}"
+            git push origin "refs/tags/${tag}"
+          done

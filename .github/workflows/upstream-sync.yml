@@ -1,0 +1,96 @@
+name: Upstream sync
+
+on:
+  schedule:
+    # Daily at 06:17 UTC
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  UPSTREAM_REPO: yandex-cloud/k8s-csi-s3
+  UPSTREAM_BRANCH: master
+  LOCAL_BRANCH: master
+  SYNC_BRANCH: upstream-sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch upstream "${UPSTREAM_BRANCH}"
+
+      - name: Determine if sync is needed
+        id: check
+        run: |
+          ahead=$(git rev-list --count "HEAD..upstream/${UPSTREAM_BRANCH}")
+          echo "ahead=${ahead}" >> "$GITHUB_OUTPUT"
+          echo "Upstream is ${ahead} commit(s) ahead of HEAD"
+
+      - name: Open / update sync PR
+        if: steps.check.outputs.ahead != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          branch="${SYNC_BRANCH}"
+
+          # Reset the sync branch from our master.
+          git checkout -B "$branch" "${LOCAL_BRANCH}"
+
+          merge_status=clean
+          if ! git merge --no-edit --no-commit "upstream/${UPSTREAM_BRANCH}"; then
+            merge_status=conflicted
+          fi
+
+          # Always re-apply our fork overrides so predictable rewrites are auto-resolved.
+          bash .github/scripts/apply-fork-overrides.sh
+
+          # If there are still unresolved conflicts after overrides, drop a marker
+          # in the PR body but commit anyway (with conflict markers) for human review.
+          remaining_conflicts=$(git diff --name-only --diff-filter=U || true)
+          if [ -n "$remaining_conflicts" ]; then
+            merge_status=conflicted
+            echo "Files with unresolved conflicts:"
+            printf '  %s\n' $remaining_conflicts
+          fi
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit after merge + overrides; skipping PR."
+            exit 0
+          fi
+          git commit -m "merge upstream/${UPSTREAM_BRANCH} (status: ${merge_status})" --no-verify
+          git push --force-with-lease origin "$branch"
+
+          body="Automated merge of \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` into \`${LOCAL_BRANCH}\`."
+          if [ "$merge_status" = "conflicted" ]; then
+            body="${body}\n\n**Merge had conflicts.** Files needing review:\n$(printf -- '- %s\n' $remaining_conflicts)"
+          fi
+
+          if gh pr view "$branch" --json number --jq .number >/dev/null 2>&1; then
+            echo "PR already open for $branch; updated branch."
+            gh pr edit "$branch" --body "$(printf '%b' "$body")" || true
+          else
+            gh pr create \
+              --base "${LOCAL_BRANCH}" \
+              --head "$branch" \
+              --title "Sync from upstream/${UPSTREAM_BRANCH}" \
+              --body "$(printf '%b' "$body")"
+          fi
