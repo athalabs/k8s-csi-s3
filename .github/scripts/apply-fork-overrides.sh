@@ -31,14 +31,5 @@ if [ -f "$chart" ]; then
   sed -i.bak -E \
     -e 's|github.com/yandex-cloud/k8s-csi-s3|github.com/athalabs/k8s-csi-s3|g' \
     "$chart"
-
-  # 4. Chart packaging version: keep one minor bump ahead of appVersion so
-  #    helm-gh-pages republishes when our chart contents change.
-  app_version=$(awk -F': *' '/^appVersion:/{print $2; exit}' "$chart")
-  if [ -n "$app_version" ]; then
-    # Compute next patch version from app_version (e.g. 0.43.6 -> 0.43.7).
-    chart_version=$(printf '%s\n' "$app_version" | awk -F. -v OFS=. '{$NF+=1; print}')
-    sed -i.bak -E "s|^version:[[:space:]]*.*|version: ${chart_version}|" "$chart"
-  fi
   rm -f "$chart.bak"
 fi
