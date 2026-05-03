@@ -17,7 +17,7 @@ ARG TARGETARCH
 LABEL maintainers="Vitaliy Filippov <vitalif@yourcmc.ru>"
 LABEL description="csi-s3 slim image"
 
-RUN apk add --no-cache fuse mailcap rclone curl
+RUN apk add --no-cache fuse3 fuse mailcap rclone curl
 RUN apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/community s3fs-fuse
 
 RUN curl -fsSL -o /usr/bin/geesefs \
