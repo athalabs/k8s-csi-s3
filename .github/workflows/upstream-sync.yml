@@ -47,6 +47,7 @@ jobs:
         if: steps.check.outputs.ahead != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           branch="${SYNC_BRANCH}"
